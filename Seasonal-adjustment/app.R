@@ -4,19 +4,20 @@ library(fpp2)
 library(seasonal)
 library(rio)
 library(lubridate)
+library(parsedate)
 
 
 ui <- fluidPage(
 
     # Application title
-    titlePanel("Time Series Seasonal Adjustment"),
+    titlePanel("Multiple Time Series Seasonal Adjustment"),
 
     # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
             fileInput("df",
                         "Choose your file (.xlsx, .xls or .csv)"),
-            downloadButton("download", "Download Seasonal adjusted data")
+            downloadButton("download", "Download seasonal adjusted data")
         ),
 
         # Show a plot of the generated distribution
@@ -24,9 +25,11 @@ ui <- fluidPage(
             tabsetPanel(
                 tabPanel("Introduction", 
                          p(""),
-                         p("The goal of this app is to use data from your suppliers to estimate flexible indexes. It lets you adjust the relative importance of every feature and automatically standardize features (substracting the mean and dividing by the standard deviation of each variable) in order to make them comparable. The obtained score corresponds to the weighted sum of standardized attributes. It's open source and all the files are hosted on ", a("my github.", href = "https://github.com/nelson-io/supplier_benchmarking")),
+                         p("The goal of this app is to use time series dataframes to estimate seasonaly adjusted series. It works with most formats (csv, xlsx, xls, dsv and more) and in few seconds it generates a dataframe with the same dimensions as the original table seasonally adjusting each time series included. It's open source and all the files are hosted on ", a("my github.", href = "https://github.com/nelson-io/seasonal_adjustment_shiny")),
                          h4(strong("Input file")),
-                         p("Choose a file from your system with suppliers data. \n Each column must be an attribute and the first column", strong("MUST"), " contain supplier names (or id's)."),
+                         p("Choose a file from your system with Time Series data. \n The first column ", strong("MUST"), " contain the date of each observation while the next columns ", 
+                           strong("MUST"), "contain the values associated to those dates:"),
+                         img(src = "table.PNG"),
                          h4(strong("Sliders")),
                          p( "Use the automatically generated sliders to adjust the relative importance of each attribute."),
                          h4(strong("Tabs")),
@@ -45,13 +48,7 @@ ui <- fluidPage(
 )
 
         
-#         mainPanel(
-#            DT::dataTableOutput("seas_table")
-#         )
-#     )
-# )
 
-# Define server logic required to draw a histogram
 server <- function(input, output) {
     
     data <- reactive({
@@ -64,8 +61,19 @@ server <- function(input, output) {
         mutate_at(vars(periodo), ~ ymd(parse_date(.)))
     })
     
+
+    freq <- reactive({
+        data() %>%
+         group_by(year(periodo)) %>%
+         summarise(total = n()) %>%
+         pull(total) %>%
+         median()
+    })
+    
     data_seas <- reactive({
-        map_df(data() %>% select(-periodo), ~ ts(.x,start = c(2014,01), frequency = 12) %>% seas() %>% seasadj() %>% 
+        map_df(data() %>% select(-periodo), ~ ts(.x,start = c(year(first(data() %>% pull(periodo))),
+                                                              month(first(data() %>% pull(periodo)))),
+                                                 frequency = freq()) %>% seas() %>% seasadj() %>% 
                    as.numeric()) %>% 
             cbind(data() %>% select(periodo), .)
     })
